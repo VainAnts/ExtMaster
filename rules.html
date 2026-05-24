@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExtMaster - 自动化规则</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body { width: 560px; min-height: 400px; max-height: 700px; }
+    .page-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .page-title { font-weight: 600; font-size: 15px; color: var(--primary); display: flex; align-items: center; gap: 6px; }
+    .rule-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .rule-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .rule-item.disabled-rule { opacity: 0.5; }
+    .rule-header { display: flex; align-items: center; padding: 8px 12px; gap: 8px; cursor: pointer; }
+    .rule-toggle { flex-shrink: 0; }
+    .rule-pattern { flex: 1; font-family: monospace; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rule-actions-summary { font-size: 11px; color: var(--text2); }
+    .rule-body { padding: 8px 12px 10px; border-top: 1px solid var(--border); display: none; flex-direction: column; gap: 6px; }
+    .rule-body.open { display: flex; }
+    .rule-action-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .rule-action-row label { font-size: 12px; color: var(--text2); width: 80px; flex-shrink: 0; }
+    .rule-action-row select { flex: 1; }
+    .rule-footer { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+    .empty-state { text-align: center; padding: 40px; color: var(--text2); }
+    .form-select { appearance: none; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; padding: 5px 8px; outline: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="page-title">📋 自动化规则</div>
+    <button class="btn btn-primary" id="btnAddRule">➕ 添加规则</button>
+  </div>
+
+  <div class="rule-list" id="ruleList">
+    <div class="empty-state">📭 暂无规则，点击上方添加按钮创建</div>
+  </div>
+
+  <!-- 添加/编辑规则弹窗 -->
+  <div class="modal-overlay" id="modalRule" style="display:none">
+    <div class="modal" style="width:440px">
+      <div class="modal-header" id="modalRuleTitle">添加规则</div>
+      <div class="modal-body">
+        <label class="form-label">URL 匹配规则 <small style="font-weight:normal">（支持 * 通配符）</small></label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" class="form-input" id="inputPattern" placeholder="例如：*://*.github.com/*" style="flex:1;font-family:monospace">
+          <button class="btn btn-secondary" id="btnConvertUrl" title="将网址转换为通配符规则" style="flex-shrink:0;font-size:12px;padding:5px 10px">转</button>
+        </div>
+        <div class="pattern-examples" style="font-size:11px;color:var(--text2);line-height:1.6;margin-top:6px;padding:6px 8px;background:var(--bg2);border-radius:6px">
+          <div style="font-weight:500;margin-bottom:2px">匹配示例：</div>
+          <code>*://*.github.com/*</code> — GitHub 全站<br>
+          <code>https://mail.google.com/*</code> — Gmail 页面<br>
+          <code>*://*/search?q=*</code> — 所有搜索引擎<br>
+          <code>*://docs.google.com/*</code> — Google 文档<br>
+          <code>*://*.notion.so/*</code> — Notion 全站
+        </div>
+
+        <label class="form-label">规则操作</label>
+        <div id="ruleActionsList">
+          <!-- 动态添加操作行 -->
+        </div>
+        <button class="btn btn-secondary" id="btnAddAction" style="margin-top:4px">➕ 添加操作</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="btnCancelRule">取消</button>
+        <button class="btn btn-danger" id="btnDeleteRule" style="display:none">删除</button>
+        <button class="btn btn-primary" id="btnSaveRule">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="rules.js"></script>
+</body>
+</html>
