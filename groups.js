@@ -6,6 +6,18 @@ let editingGroupId = null;
 let currentSort = 'default';
 let storageCache = {};
 
+// HTML 转义函数，防止 XSS
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// 生成唯一 ID
+function generateId() {
+  return 'grp' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
@@ -143,6 +155,85 @@ function renderUngrouped() {
   }
 }
 
+// ── 分组模态框管理 ──
+function openGroupModal(groupId = null) {
+  const modal = document.getElementById('modalGroup');
+  const title = document.getElementById('modalGroupTitle');
+  const nameInput = document.getElementById('inputGroupName');
+  const deleteBtn = document.getElementById('btnDeleteGroup');
+
+  editingGroupId = groupId;
+
+  if (groupId) {
+    // 编辑模式
+    const group = groups.find(g => g.id === groupId);
+    if (!group) return;
+    title.textContent = '编辑分组';
+    nameInput.value = group.name;
+    deleteBtn.style.display = 'inline-block';
+  } else {
+    // 新建模式
+    title.textContent = '新建分组';
+    nameInput.value = '';
+    deleteBtn.style.display = 'none';
+  }
+
+  modal.style.display = 'flex';
+  nameInput.focus();
+}
+
+function closeGroupModal() {
+  const modal = document.getElementById('modalGroup');
+  modal.style.display = 'none';
+  editingGroupId = null;
+}
+
+async function confirmGroup() {
+  const nameInput = document.getElementById('inputGroupName');
+  const name = nameInput.value.trim();
+
+  if (!name) {
+    alert('请输入分组名称');
+    return;
+  }
+
+  if (editingGroupId) {
+    // 编辑现有分组
+    const group = groups.find(g => g.id === editingGroupId);
+    if (group) {
+      group.name = name;
+    }
+  } else {
+    // 创建新分组
+    const newGroup = {
+      id: generateId(),
+      name: name,
+      members: []
+    };
+    groups.push(newGroup);
+  }
+
+  await setStorage({ groups });
+  closeGroupModal();
+  renderAll();
+}
+
+async function deleteGroup() {
+  if (!editingGroupId) return;
+
+  const group = groups.find(g => g.id === editingGroupId);
+  if (!group) return;
+
+  if (!confirm(`确定删除分组「${group.name}」？\n成员不会被卸载，将移回未分组列表。`)) {
+    return;
+  }
+
+  groups = groups.filter(g => g.id !== editingGroupId);
+  await setStorage({ groups });
+  closeGroupModal();
+  renderAll();
+}
+
 // ── 事件绑定 ──
 function bindEvents() {
   // 弹窗
@@ -196,9 +287,24 @@ function bindEvents() {
     if (act === 'remove-member') {
       const grp = groups.find(g => g.id === e.target.dataset.grp);
       if (grp) {
+        // 保存当前展开状态
+        const openIds = [];
+        document.querySelectorAll('.group-members.open').forEach(m => {
+          const id = m.id.replace('members-', '');
+          openIds.push(id);
+        });
+        
         grp.members = grp.members.filter(m => m !== e.target.dataset.id);
         await setStorage({ groups });
         renderAll();
+        
+        // 恢复展开状态
+        setTimeout(() => {
+          openIds.forEach(id => {
+            const members = document.getElementById(`members-${id}`);
+            if (members) members.classList.add('open');
+          });
+        }, 0);
       }
       return;
     }
@@ -214,7 +320,7 @@ function bindEvents() {
   setupMemberDragDrop();
 
   // ── 未分组列表排序下拉 ──
-  setupGroupSort();
+  // setupGroupSort(); // 已移除，不需要单独调用
 }
 
 // ── 分组拖拽排序（HTML5 Drag & Drop） ──
@@ -398,7 +504,8 @@ function setupMemberDragDrop() {
     e.dataTransfer.dropEffect = 'move';
 
     // 清除所有高亮
-    document.querySelectorAll('.member-item.drag-over').forEach(c => c.classList.remove('drag-over'));
+    document.querySelectorAll('.member-item.drag-over-above').forEach(c => c.classList.remove('drag-over-above'));
+    document.querySelectorAll('.member-item.drag-over-below').forEach(c => c.classList.remove('drag-over-below'));
     document.querySelectorAll('.group-members.drag-hover').forEach(c => c.classList.remove('drag-hover'));
     document.querySelectorAll('.group-card.drag-hover').forEach(c => c.classList.remove('drag-hover'));
 
@@ -407,14 +514,39 @@ function setupMemberDragDrop() {
     const targetMembersArea = e.target.closest('.group-members');
     const targetCard = e.target.closest('.group-card');
 
+    console.log('[MemberDrag dragover] target:', e.target.className, 'targetItem:', !!targetItem, 'targetMembersArea:', !!targetMembersArea);
+
     if (targetItem && targetItem !== memberDragSrc) {
-      // 拖到成员项上 - 显示蓝色指示线
-      console.log('[MemberDrag dragover] Over member item:', targetItem.dataset.extId);
-      targetItem.classList.add('drag-over');
+      // 拖到成员项上 - 根据鼠标位置决定显示在上方还是下方
+      const rect = targetItem.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      
+      if (e.clientY < midY) {
+        // 在上半部分 - 显示在上方
+        console.log('[MemberDrag dragover] Over member item (above):', targetItem.dataset.extId);
+        targetItem.classList.add('drag-over-above');
+        console.log('[MemberDrag dragover] Added drag-over-above class');
+      } else {
+        // 在下半部分 - 显示在下方
+        console.log('[MemberDrag dragover] Over member item (below):', targetItem.dataset.extId);
+        targetItem.classList.add('drag-over-below');
+        console.log('[MemberDrag dragover] Added drag-over-below class');
+      }
     } else if (targetMembersArea) {
-      // 拖到分组成员区域 - 高亮背景
-      console.log('[MemberDrag dragover] Over members area:', targetMembersArea.id);
-      targetMembersArea.classList.add('drag-hover');
+      // 拖到分组成员区域的空白处 - 只在没有成员项时才高亮背景
+      // 检查是否有成员项，如果有则找到最后一个成员项并显示在其下方
+      const members = targetMembersArea.querySelectorAll('.member-item:not(.dragging)');
+      if (members.length > 0) {
+        // 有成员项时，在最后一个成员项下方显示指示器
+        const lastMember = members[members.length - 1];
+        console.log('[MemberDrag dragover] Over members area, showing below last member:', lastMember.dataset.extId);
+        lastMember.classList.add('drag-over-below');
+        console.log('[MemberDrag dragover] Added drag-over-below to last member');
+      } else {
+        // 没有成员项时，高亮整个区域
+        console.log('[MemberDrag dragover] Over empty members area:', targetMembersArea.id);
+        targetMembersArea.classList.add('drag-hover');
+      }
     } else if (targetCard) {
       // 拖到分组卡片上（包括折叠状态）- 高亮整个卡片
       console.log('[MemberDrag dragover] Over group card:', targetCard.dataset.id);
@@ -423,19 +555,8 @@ function setupMemberDragDrop() {
   });
 
   groupList.addEventListener('dragleave', (e) => {
-    const item = e.target.closest('.member-item');
-    const membersArea = e.target.closest('.group-members');
-    const card = e.target.closest('.group-card');
-
-    if (item && (!e.relatedTarget || !item.contains(e.relatedTarget))) {
-      item.classList.remove('drag-over');
-    }
-    if (membersArea && (!e.relatedTarget || !membersArea.contains(e.relatedTarget))) {
-      membersArea.classList.remove('drag-hover');
-    }
-    if (card && (!e.relatedTarget || !card.contains(e.relatedTarget))) {
-      card.classList.remove('drag-hover');
-    }
+    // 不在这里清除类名，因为 dragleave 会在鼠标移动到子元素时频繁触发
+    // 所有清理工作都在 dragover 开始时处理
   });
 
   groupList.addEventListener('drop', async (e) => {
@@ -470,18 +591,43 @@ function setupMemberDragDrop() {
 
     let targetGrpId, targetExtId, insertBefore;
 
+    // 重新根据鼠标位置计算 insertBefore（与 dragover 视觉指示保持一致）
+    function calcInsertBefore(item) {
+      const rect = item.getBoundingClientRect();
+      return e.clientY < rect.top + rect.height / 2;
+    }
+
     if (targetItem && targetItem !== memberDragSrc) {
       // 拖到某个成员项上
       targetGrpId = targetItem.dataset.grpId;
       targetExtId = targetItem.dataset.extId;
-      insertBefore = true;
-      console.log('[MemberDrag] Target - member item:', targetExtId, 'in group:', targetGrpId);
+      insertBefore = calcInsertBefore(targetItem);
+      console.log('[MemberDrag] Target - member item:', targetExtId, 'in group:', targetGrpId, 'insertBefore:', insertBefore);
     } else if (targetMembersArea) {
-      // 拖到分组成员区域（放到最后）
-      targetGrpId = targetMembersArea.id.replace('members-', '');
-      targetExtId = null;
-      insertBefore = false;
-      console.log('[MemberDrag] Target - group area:', targetGrpId, '(append to end)');
+      // 拖到分组成员区域空白处：若鼠标在区域内但不在任何成员项上，放到最后
+      // 若鼠标恰好落在最后一个成员项上，则以该成员为参考重新计算
+      const members = [...targetMembersArea.querySelectorAll('.member-item:not(.dragging)')];
+      if (members.length > 0) {
+        const lastMember = members[members.length - 1];
+        // 如果鼠标不在任何成员项上（e.target 是 group-members 本身），放最后
+        if (!e.target.closest('.member-item')) {
+          targetGrpId = targetMembersArea.id.replace('members-', '');
+          targetExtId = null;
+          insertBefore = false;
+          console.log('[MemberDrag] Target - empty area of group:', targetGrpId, '(append to end)');
+        } else {
+          // 鼠标在最后一个成员上，以此为参考
+          targetGrpId = targetMembersArea.id.replace('members-', '');
+          targetExtId = lastMember.dataset.extId;
+          insertBefore = calcInsertBefore(lastMember);
+          console.log('[MemberDrag] Target - last member of group:', targetExtId, 'insertBefore:', insertBefore);
+        }
+      } else {
+        targetGrpId = targetMembersArea.id.replace('members-', '');
+        targetExtId = null;
+        insertBefore = false;
+        console.log('[MemberDrag] Target - empty group area:', targetGrpId, '(append to end)');
+      }
     } else if (targetCard) {
       // 拖到分组卡片上（包括折叠状态）- 放到该分组最后
       targetGrpId = targetCard.dataset.id;
@@ -583,10 +729,13 @@ function setupMemberDragDrop() {
 
 function cleanupDrag() {
   document.querySelectorAll('.member-item').forEach(c => {
-    c.classList.remove('dragging', 'drag-over');
+    c.classList.remove('dragging', 'drag-over-above', 'drag-over-below');
     c.style.opacity = ''; // 恢复透明度
   });
   document.querySelectorAll('.group-members').forEach(c => {
+    c.classList.remove('drag-hover');
+  });
+  document.querySelectorAll('.group-card').forEach(c => {
     c.classList.remove('drag-hover');
   });
   memberDragSrc = null;
@@ -657,10 +806,8 @@ function setupUngroupedDragAndDrop() {
   });
 
   groupList.addEventListener('dragleave', (e) => {
-    const card = e.target.closest('.group-card');
-    const members = e.target.closest('.group-members');
-    if (card && !card.contains(e.relatedTarget)) card.classList.remove('drag-over');
-    if (members && !members.contains(e.relatedTarget)) members.classList.remove('drag-hover');
+    // 不在这里清除类名，因为 dragleave 会在鼠标移动到子元素时频繁触发
+    // 所有清理工作都在 dragover 开始时处理
   });
 
   groupList.addEventListener('drop', async (e) => {
@@ -750,85 +897,4 @@ function setupUngroupedDragAndDrop() {
     dragExtId = null;
     renderUngrouped();
   });
-}
-
-// ── 弹窗 ──
-function openGroupModal(editId = null) {
-  editingGroupId = editId;
-  const modal = document.getElementById('modalGroup');
-  const title = document.getElementById('modalGroupTitle');
-  const deleteBtn = document.getElementById('btnDeleteGroup');
-  const nameInput = document.getElementById('inputGroupName');
-
-  if (editId) {
-    const grp = groups.find(g => g.id === editId);
-    title.textContent = '编辑分组';
-    nameInput.value = grp.name;
-    deleteBtn.style.display = 'inline-block';
-  } else {
-    title.textContent = '新建分组';
-    nameInput.value = '';
-    deleteBtn.style.display = 'none';
-  }
-
-  modal.style.display = 'flex';
-  nameInput.focus();
-}
-
-function closeGroupModal() {
-  document.getElementById('modalGroup').style.display = 'none';
-  editingGroupId = null;
-}
-
-async function confirmGroup() {
-  const name = document.getElementById('inputGroupName').value.trim();
-  if (!name) return;
-
-  if (editingGroupId) {
-    const grp = groups.find(g => g.id === editingGroupId);
-    if (grp) { grp.name = name; }
-  } else {
-    groups.push({ id: uid(), name, members: [] });
-  }
-
-  await setStorage({ groups });
-  closeGroupModal();
-  renderAll();
-}
-
-async function deleteGroup() {
-  if (!editingGroupId) return;
-  groups = groups.filter(g => g.id !== editingGroupId);
-  await setStorage({ groups });
-  closeGroupModal();
-  renderAll();
-}
-
-function escapeHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-
-// ── 未分组列表排序下拉 ──
-function setupGroupSort() {
-  const sel = document.getElementById('groupSortSelect');
-  if (!sel) return;
-  sel.onchange = async (e) => {
-    currentSort = e.target.value;
-    storageCache.sortModes = storageCache.sortModes || {};
-    storageCache.sortModes['ungrouped'] = currentSort;
-
-    // 切换到手动排序时，用当前顺序初始化 manualOrder
-    if (currentSort === 'manual') {
-      storageCache.manualOrders = storageCache.manualOrders || {};
-      if (!Array.isArray(storageCache.manualOrders['ungrouped']) || storageCache.manualOrders['ungrouped'].length === 0) {
-        storageCache.manualOrders['ungrouped'] = getUngrouped().map(x => x.id);
-      }
-    }
-
-    await setStorage({ sortModes: storageCache.sortModes, manualOrders: storageCache.manualOrders });
-    const hint = document.getElementById('groupSortHint');
-    if (hint) hint.style.display = currentSort === 'manual' ? 'block' : 'none';
-    renderAll();   // 同步刷新分组内成员排序 + 未分组列表
-  };
 }
