@@ -17,21 +17,28 @@
 
     /* 分组列表 */
     .group-list { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-    .group-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .group-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: all 0.2s; }
     .group-card.dragging { opacity: 0.4; }
     .group-card.drag-over { border-color: var(--primary); border-style: dashed; background: color-mix(in srgb, var(--primary) 8%, var(--bg2)); }
+    .group-card.drag-hover { border-color: var(--primary); border-style: dashed; background: color-mix(in srgb, var(--primary) 12%, var(--bg2)); box-shadow: 0 0 8px rgba(66, 133, 244, 0.3); }
     .sort-indicator { height: 3px; background: var(--primary); border-radius: 2px; margin: 2px 0; pointer-events: none; }
-    .group-card-header { display: flex; align-items: center; padding: 8px 10px; gap: 6px; cursor: default; }
+    .group-card-header { display: flex; align-items: center; padding: 8px 10px; gap: 6px; cursor: default; user-select: none; }
     .drag-handle { cursor: grab; color: var(--text2); font-size: 14px; padding: 2px; flex-shrink: 0; user-select: none; }
     .drag-handle:active { cursor: grabbing; }
     .group-name { flex: 1; font-weight: 500; font-size: 13px; }
     .group-count { font-size: 11px; color: var(--text2); flex-shrink: 0; }
     .group-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
-    .group-members { padding: 6px 10px 8px; border-top: 1px solid var(--border); display: none; flex-direction: column; gap: 4px; min-height: 24px; }
+    .group-members { padding: 6px 10px 8px; border-top: 1px solid var(--border); display: none; flex-direction: column; gap: 4px; min-height: 24px; transition: background 0.2s; }
     .group-members.open { display: flex; }
-    .group-members.drag-hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
-    .member-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
-    .member-icon { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; }
+    .group-members.drag-hover { background: color-mix(in srgb, var(--primary) 12%, transparent); border-radius: 4px; }
+    .member-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-radius: 4px; transition: background 0.2s, opacity 0.2s; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; }
+    .member-item[draggable="true"] { cursor: grab; }
+    .member-item[draggable="true"]:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); }
+    .member-item[draggable="true"]:active { cursor: grabbing; }
+    .member-item.dragging { opacity: 0.3 !important; }
+    .member-item.drag-over { position: relative; }
+    .member-item.drag-over::before { content: ''; position: absolute; top: -2px; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary), #6ba1ff); border-radius: 2px; z-index: 10; pointer-events: none; box-shadow: 0 0 4px rgba(66, 133, 244, 0.5); }
+    .member-icon { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; pointer-events: none; flex-shrink: 0; }
     .member-name { flex: 1; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .member-actions { display: flex; gap: 2px; flex-shrink: 0; }
     .empty-state { text-align: center; padding: 30px; color: var(--text2); font-size: 12px; }
