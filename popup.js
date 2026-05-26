@@ -1,4 +1,4 @@
-﻿// popup.js - ExtMaster 主弹窗逻辑
+// popup.js - ExtMaster 主弹窗逻辑
 
 let allExtensions = [];
 let currentGroup = 'all';
@@ -139,13 +139,6 @@ function createExtCard(ext, group) {
   const meta = document.createElement('div');
   meta.className = 'ext-meta';
   meta.innerHTML = `<span class="ext-version">v${ext.version}</span>`;
-
-  if (group) {
-    const tag = document.createElement('span');
-    tag.className = 'group-tag';
-    tag.textContent = group.name;
-    meta.appendChild(tag);
-  }
 
   info.appendChild(name);
   info.appendChild(meta);
