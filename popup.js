@@ -69,6 +69,68 @@ async function init() {
   setupGroupTabs();
   await loadExtensions();
   bindEvents();
+
+  // 监听其他页面的存储变更，保持数据同步
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+
+    const handleChange = async () => {
+      if (changes.theme) {
+        storageData.theme = changes.theme.newValue;
+        applyTheme(changes.theme.newValue);
+        const btn = document.getElementById('btnTheme');
+        if (btn) btn.textContent = changes.theme.newValue === 'dark' ? '☀️' : '🌙';
+      }
+
+      if (changes.groups) {
+        storageData.groups = changes.groups.newValue;
+        setupGroupTabs();
+        renderExtensions();
+      }
+
+      if (changes.sortModes) {
+        storageData.sortModes = changes.sortModes.newValue;
+        currentSort = (storageData.sortModes || {})[currentGroup] || 'default';
+        const sel = document.getElementById('sortSelect');
+        if (sel) sel.value = currentSort;
+        const hint = document.getElementById('sortHint');
+        if (hint) hint.style.display = currentSort === 'manual' ? 'flex' : 'none';
+        renderExtensions();
+      }
+
+      if (changes.manualOrders) {
+        storageData.manualOrders = changes.manualOrders.newValue;
+        renderExtensions();
+      }
+
+      if (changes.autoRuleEnabled) {
+        storageData.autoRuleEnabled = changes.autoRuleEnabled.newValue;
+        const toggle = document.getElementById('toggleAutoRule');
+        if (toggle) toggle.checked = changes.autoRuleEnabled.newValue;
+      }
+
+      if (changes.browserConfig) {
+        storageData.browserConfig = changes.browserConfig.newValue;
+        const cfg = changes.browserConfig.newValue || {};
+        const sel = document.getElementById('browserSelect');
+        if (sel) sel.value = cfg.type || 'auto';
+        const input = document.getElementById('customStoreUrl');
+        if (input) input.value = cfg.customUrl || '';
+        const row = document.getElementById('customUrlRow');
+        if (row) row.style.display = cfg.type === 'custom' ? 'flex' : 'none';
+      }
+
+      if (changes.rules) {
+        storageData.rules = changes.rules.newValue;
+      }
+
+      if (changes._extChange) {
+        await loadExtensions();
+      }
+    };
+
+    handleChange();
+  });
 }
 
 // ── 加载扩展列表 ──

@@ -129,6 +129,14 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   }
 });
 
+// 广播扩展启用/禁用状态到所有视图
+chrome.management.onEnabled.addListener((ext) => {
+  chrome.storage.local.set({ _extChange: { id: ext.id, enabled: true, time: Date.now() } });
+});
+chrome.management.onDisabled.addListener((ext) => {
+  chrome.storage.local.set({ _extChange: { id: ext.id, enabled: false, time: Date.now() } });
+});
+
 // 监听消息
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {

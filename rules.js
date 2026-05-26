@@ -13,6 +13,29 @@ async function init() {
   extensions = await getExtensions();
   renderRules();
   bindEvents();
+
+  // 监听其他页面的存储变更，保持数据同步
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+
+    const handleChange = async () => {
+      if (changes.theme) {
+        applyTheme(changes.theme.newValue);
+      }
+
+      if (changes.rules) {
+        rules = changes.rules.newValue;
+        renderRules();
+      }
+
+      if (changes._extChange) {
+        extensions = await getExtensions();
+        renderRules();
+      }
+    };
+
+    handleChange();
+  });
 }
 
 function renderRules() {

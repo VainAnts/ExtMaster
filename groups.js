@@ -50,6 +50,60 @@ async function init() {
   if (hint) hint.style.display = currentSort === 'manual' ? 'block' : 'none';
   renderAll();
   bindEvents();
+
+  // 监听其他页面的存储变更，保持数据同步
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+
+    const handleChange = async () => {
+      if (changes.theme) {
+        applyTheme(changes.theme.newValue);
+      }
+
+      const needsRefresh = changes.groups || changes.sortModes || changes.manualOrders;
+      const needsExtRefresh = changes._extChange;
+
+      if (changes.groups) {
+        groups = changes.groups.newValue;
+      }
+
+      if (changes.sortModes) {
+        storageCache.sortModes = changes.sortModes.newValue;
+      }
+
+      if (changes.manualOrders) {
+        storageCache.manualOrders = changes.manualOrders.newValue;
+      }
+
+      if (needsExtRefresh) {
+        extensions = await getExtensions();
+      }
+
+      if (needsRefresh || needsExtRefresh) {
+        const openIds = [...document.querySelectorAll('.group-members.open')]
+          .map(el => el.id.replace('members-', ''));
+
+        const sel = document.getElementById('groupSortSelect');
+        if (sel) {
+          currentSort = (storageCache.sortModes || {})['ungrouped'] || 'default';
+          sel.value = currentSort;
+        }
+        const hint = document.getElementById('groupSortHint');
+        if (hint) hint.style.display = currentSort === 'manual' ? 'block' : 'none';
+
+        renderAll();
+
+        requestAnimationFrame(() => {
+          openIds.forEach(id => {
+            const el = document.getElementById(`members-${id}`);
+            if (el) el.classList.add('open');
+          });
+        });
+      }
+    };
+
+    handleChange();
+  });
 }
 
 function getUngrouped() {
