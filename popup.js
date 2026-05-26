@@ -25,11 +25,6 @@ function validateUrlPattern(pattern) {
   return { valid: true };
 }
 
-// ── 主题应用函数（缺失的补全） ──
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-}
-
 // ── 初始化 ──
 document.addEventListener('DOMContentLoaded', init);
 
@@ -37,17 +32,8 @@ async function init() {
   storageData = await getStorage();
 
   // 迁移旧版全局配置
-  if (storageData.sortMode !== undefined && !storageData.sortModes) {
-    storageData.sortModes = { all: storageData.sortMode };
-    delete storageData.sortMode;
-    await setStorage({ sortModes: storageData.sortModes });
-    await new Promise(r => chrome.storage.local.remove('sortMode', r));
-  }
-  if (storageData.manualOrder !== undefined && !storageData.manualOrders) {
-    storageData.manualOrders = { all: storageData.manualOrder };
-    delete storageData.manualOrder;
-    await setStorage({ manualOrders: storageData.manualOrders });
-    await new Promise(r => chrome.storage.local.remove('manualOrder', r));
+  if (migrateStorageKeys(storageData)) {
+    await setStorage({ sortModes: storageData.sortModes, manualOrders: storageData.manualOrders });
   }
   storageData.sortModes = storageData.sortModes || {};
   storageData.manualOrders = storageData.manualOrders || {};
@@ -255,7 +241,7 @@ function setupGroupTabs() {
 }
 
 // ── 事件绑定 ──
-function bindEvents() {
+function setupThemeToggle() {
   // 主题切换
   document.getElementById('btnTheme').onclick = async () => {
     const newTheme = storageData.theme === 'dark' ? 'light' : 'dark';
@@ -265,6 +251,9 @@ function bindEvents() {
     document.getElementById('btnTheme').textContent = newTheme === 'dark' ? '☀️' : '🌙';
   };
 
+}
+
+function setupSettingsPanel() {
   // 设置面板
   document.getElementById('btnSettings').onclick = () => {
     document.getElementById('settingsPanel').classList.toggle('open');
@@ -279,6 +268,9 @@ function bindEvents() {
     await setStorage({ autoRuleEnabled: e.target.checked });
   };
 
+}
+
+function setupBrowserConfig() {
   // 浏览器商店配置
   document.getElementById('browserSelect').onchange = async (e) => {
     const type = e.target.value;
@@ -329,55 +321,19 @@ function bindEvents() {
     }
   };
 
+}
+
+function setupExportNames() {
   // 导出扩展名称
   document.getElementById('btnExportNames').onclick = async () => {
     const exts = await getExtensions();
     const lines = exts.map(e => e.name).join('\n');
-    const blob = new Blob([lines], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `extmaster-extensions-${new Date().toISOString().slice(0,10)}.txt`;
-    a.click(); URL.revokeObjectURL(url);
+    downloadAsFile(lines, `extmaster-extensions-${new Date().toISOString().slice(0,10)}.txt`, 'text/plain');
   };
 
-  // 备份（添加缺失的 3 个功能）
-  document.getElementById('btnBackup').onclick = async () => {
-    const data = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      // ✅ 已备份的功能
-      rules: storageData.rules || [],
-      autoRuleEnabled: storageData.autoRuleEnabled ?? true,
-      groups: (storageData.groups || []).map(g => {
-        const members = [];
-        for (const eid of g.members) {
-          const ext = allExtensions.find(e => e.id === eid);
-          members.push({ id: eid, name: ext ? ext.name : '' });
-        }
-        return { id: g.id, name: g.name, members };
-      }),
-      // ✅ 新增：排序模式
-      sortModes: storageData.sortModes || {},
-      // ✅ 新增：手动排序顺序
-      manualOrders: storageData.manualOrders || {},
-      // ✅ 新增：主题设置
-      theme: storageData.theme || 'light'
-    };
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `extmaster-backup-${new Date().toISOString().slice(0,10)}.json`;
-    a.click(); URL.revokeObjectURL(url);
-  };
+}
 
-  // 恢复（添加备份文件验证）
-  document.getElementById('btnRestore').onclick = () => {
-    document.getElementById('fileRestore').click();
-  };
-
-  // 验证备份数据结构
-  function validateBackupData(data) {
+function validateBackupData(data) {
     if (!data || typeof data !== 'object') {
       return { valid: false, error: '无效的备份文件' };
     }
@@ -484,6 +440,41 @@ function bindEvents() {
     return { valid: true };
   }
 
+
+function setupBackupRestore() {
+  // 备份（添加缺失的 3 个功能）
+  document.getElementById('btnBackup').onclick = async () => {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      // ✅ 已备份的功能
+      rules: storageData.rules || [],
+      autoRuleEnabled: storageData.autoRuleEnabled ?? true,
+      groups: (storageData.groups || []).map(g => {
+        const members = [];
+        for (const eid of g.members) {
+          const ext = allExtensions.find(e => e.id === eid);
+          members.push({ id: eid, name: ext ? ext.name : '' });
+        }
+        return { id: g.id, name: g.name, members };
+      }),
+      // ✅ 新增：排序模式
+      sortModes: storageData.sortModes || {},
+      // ✅ 新增：手动排序顺序
+      manualOrders: storageData.manualOrders || {},
+      // ✅ 新增：主题设置
+      theme: storageData.theme || 'light'
+    };
+    downloadAsFile(JSON.stringify(data, null, 2), `extmaster-backup-${new Date().toISOString().slice(0,10)}.json`);
+  };
+
+  // 恢复（添加备份文件验证）
+  document.getElementById('btnRestore').onclick = () => {
+    document.getElementById('fileRestore').click();
+  };
+
+  // 验证备份数据结构
+
   document.getElementById('fileRestore').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -554,6 +545,46 @@ function bindEvents() {
     }
   };
 
+}
+
+function setupSortSelect() {
+  // 排序
+  document.getElementById('sortSelect').onchange = async (e) => {
+    currentSort = e.target.value;
+    storageData.sortModes = storageData.sortModes || {};
+    storageData.sortModes[currentGroup] = currentSort;
+
+    // 切换到手动排序时，如果当前分组还没有 manualOrder，则用当前列表顺序初始化
+    if (currentSort === 'manual') {
+      storageData.manualOrders = storageData.manualOrders || {};
+      if (!Array.isArray(storageData.manualOrders[currentGroup]) || storageData.manualOrders[currentGroup].length === 0) {
+        const filtered = allExtensions.filter(ext => {
+          if (currentGroup === 'all') return true;
+          const grp = (storageData.groups || []).find(g => g.id === currentGroup);
+          return grp && grp.members && grp.members.includes(ext.id);
+        });
+        storageData.manualOrders[currentGroup] = filtered.map(x => x.id);
+      }
+    }
+
+    await setStorage({ sortModes: storageData.sortModes, manualOrders: storageData.manualOrders });
+    document.getElementById('sortHint').style.display = currentSort === 'manual' ? 'flex' : 'none';
+    renderExtensions();
+  };
+
+}
+
+function bindEvents() {
+  setupThemeToggle();
+
+  setupSettingsPanel();
+
+  setupBrowserConfig();
+
+  setupExportNames();
+
+  setupBackupRestore();
+
   // 分组标签
   document.getElementById('groupTabs').onclick = async (e) => {
     const tab = e.target.closest('.tab');
@@ -619,30 +650,7 @@ function bindEvents() {
     document.getElementById('modalAddGroup').style.display = 'none';
   };
 
-  // 排序
-  document.getElementById('sortSelect').onchange = async (e) => {
-    currentSort = e.target.value;
-    storageData.sortModes = storageData.sortModes || {};
-    storageData.sortModes[currentGroup] = currentSort;
-
-    // 切换到手动排序时，如果当前分组还没有 manualOrder，则用当前列表顺序初始化
-    if (currentSort === 'manual') {
-      storageData.manualOrders = storageData.manualOrders || {};
-      if (!Array.isArray(storageData.manualOrders[currentGroup]) || storageData.manualOrders[currentGroup].length === 0) {
-        const filtered = allExtensions.filter(ext => {
-          if (currentGroup === 'all') return true;
-          const grp = (storageData.groups || []).find(g => g.id === currentGroup);
-          return grp && grp.members && grp.members.includes(ext.id);
-        });
-        storageData.manualOrders[currentGroup] = filtered.map(x => x.id);
-      }
-    }
-
-    await setStorage({ sortModes: storageData.sortModes, manualOrders: storageData.manualOrders });
-    document.getElementById('sortHint').style.display = currentSort === 'manual' ? 'flex' : 'none';
-    renderExtensions();
-  };
-
+  setupSortSelect();
   // 扩展列表点击
   document.getElementById('extList').onclick = handleExtListClick;
 

@@ -338,6 +338,3 @@ async function saveInlineEdit(ruleId) {
   if (body) body.classList.remove('open');
 }
 
-function escapeHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}

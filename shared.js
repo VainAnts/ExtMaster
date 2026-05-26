@@ -74,12 +74,7 @@ function getCurrentTabUrl() {
 
 // 主题 CSS 变量应用
 function applyTheme(theme) {
-  const root = document.documentElement;
-  if (theme === 'dark') {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
-  }
+  document.documentElement.dataset.theme = theme;
 }
 
 // 排序扩展
@@ -103,7 +98,8 @@ function sortExtensions(exts, mode, manualOrder) {
 
 // 生成占位扩展图标 SVG (inline data URI)
 function placeholderIcon(size = 48, color = '#9aa0a6') {
-  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" rx="8" fill="${color}"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="${size * 0.4}" font-family="system-ui">E</text></svg>`)}`;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '"><rect width="' + size + '" height="' + size + '" rx="8" fill="' + color + '"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="' + (size * 0.4) + '" font-family="system-ui">E</text></svg>';
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 
 // 获取当前应使用的商店 URL（前端调用）
@@ -113,4 +109,51 @@ async function getStoreUrl() {
   if (cfg.type === 'custom' && cfg.customUrl) return cfg.customUrl;
   if (cfg.type !== 'auto' && BROWSE_STORE_URLS[cfg.type]) return BROWSE_STORE_URLS[cfg.type];
   return BROWSE_STORE_URLS[detectBrowser()];
+}
+
+// HTML 转义，防止 XSS
+function escapeHtml(text) {
+  return String(text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 迁移旧版存储 key（sortMode→sortModes, manualOrder→manualOrders）
+function migrateStorageKeys(store) {
+  let changed = false;
+  if (store.sortMode !== undefined && !store.sortModes) {
+    store.sortModes = { all: store.sortMode };
+    delete store.sortMode;
+    changed = true;
+  }
+  if (store.manualOrder !== undefined && !store.manualOrders) {
+    store.manualOrders = { all: store.manualOrder };
+    delete store.manualOrder;
+    changed = true;
+  }
+  return changed;
+}
+
+// 下载文件
+function downloadAsFile(content, filename, mimeType) {
+  mimeType = mimeType || 'application/json';
+  const blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 保存/恢复分组展开状态（用于 DnD 重渲染后恢复展开）
+function saveGroupOpenStates() {
+  return [...document.querySelectorAll('.group-members.open')].map(el => el.id.replace('members-', ''));
+}
+
+function restoreGroupOpenStates(ids) {
+  requestAnimationFrame(() => {
+    ids.forEach(id => {
+      const el = document.getElementById('members-' + id);
+      if (el) el.classList.add('open');
+    });
+  });
 }
